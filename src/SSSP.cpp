@@ -34,6 +34,7 @@
 
 #include "GraphMatRuntime.h"
 
+#include <chrono>
 //typedef unsigned char distance_type;
 typedef unsigned int distance_type;
 //typedef double distance_type;
@@ -41,6 +42,39 @@ typedef unsigned int distance_type;
 
 distance_type MAX_DIST = std::numeric_limits<distance_type>::max();
 
+using namespace std::chrono;
+double gComputeTime;
+inline void startComputeTime(time_point<high_resolution_clock>* start) {
+  *start = high_resolution_clock::now();
+}
+
+inline void endComputeTime(time_point<high_resolution_clock>* start, time_point<high_resolution_clock>* end) {
+  *end = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(*end-*start);
+  gComputeTime += duration.count();
+}
+double gTotalTime;
+inline void startTotalTime(time_point<high_resolution_clock>* start) {
+  *start = high_resolution_clock::now();
+}
+
+inline void endTotalTime(time_point<high_resolution_clock>* start, time_point<high_resolution_clock>* end) {
+  *end = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(*end-*start);
+  gTotalTime += duration.count();
+}
+/*
+inline void startComputeTime(struct timeval* start) {
+  gettimeofday(start, 0);
+}
+
+inline void endComputeTime(struct timeval* start, struct timeval* end) {
+  gettimeofday(end, 0);
+  float time;
+  time = (end->tv_sec-start->tv_sec)*1e3+(end->tv_usec-start->tv_usec)*1e-3;
+  gComputeTime += time;
+}
+*/
 class SSSP_vertex_type {
   public: 
     distance_type distance;
@@ -71,19 +105,35 @@ class SSSP : public GraphMat::GraphProgram<distance_type, distance_type, SSSP_ve
   }
 
   void reduce_function(distance_type& a, const distance_type& b) const {
+    //struct timeval start, end;
+    time_point<high_resolution_clock> start, end;
+    startComputeTime(&start);
+    endComputeTime(&start, &end);
     a = (a<=b)?(a):(b);
   }
 
   void process_message(const distance_type& message, const edge_type edge_val, const SSSP_vertex_type& vertexprop, distance_type &res) const {
+    //struct timeval start, end;
+    time_point<high_resolution_clock> start, end;
+    startComputeTime(&start);
+    endComputeTime(&start, &end);
     res = message + edge_val;
   }
 
   bool send_message(const SSSP_vertex_type& vertexprop, distance_type& message) const {
+    //struct timeval start, end;
+    time_point<high_resolution_clock> start, end;
+    startComputeTime(&start);
+    endComputeTime(&start, &end);
     message = vertexprop.distance;
     return true;
   }
 
   void apply(const distance_type& message_out, SSSP_vertex_type& vertexprop)  {
+    //struct timeval start, end;
+    time_point<high_resolution_clock> start, end;
+    startComputeTime(&start);
+    endComputeTime(&start, &end);
     vertexprop.distance = std::min(vertexprop.distance, message_out);
   }
 
@@ -117,13 +167,22 @@ void run_sssp(const char* filename, int v) {
   G.setVertexproperty(v, init);
   G.setActive(v);
 
-  struct timeval start, end;
-  gettimeofday(&start, 0);
+  //struct timeval start, end;
+  //gettimeofday(&start, 0);
+  time_point<high_resolution_clock> start, end;
+  startTotalTime(&start);
 
   GraphMat::run_graph_program(&b, G, GraphMat::UNTIL_CONVERGENCE, &tmp_ds);
 
-  gettimeofday(&end, 0);
-  printf("Time = %.3f ms \n", (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3);
+  //gettimeofday(&end, 0);
+  //double total_time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
+  endTotalTime(&start, &end);
+  double graph_time, compute_time;
+  compute_time = gComputeTime;
+  graph_time = gTotalTime - compute_time;
+  printf("compute Time = %.3f us (%.3f percent)\n", compute_time, compute_time/gTotalTime);
+  printf("graph Time = %.3f us (%.3f percent)\n", graph_time, graph_time/gTotalTime);
+  printf("Total Time = %.3f us \n", gTotalTime);
   
  
   int reachable_vertices = 0;

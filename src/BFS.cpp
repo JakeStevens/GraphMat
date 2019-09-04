@@ -37,6 +37,19 @@ typedef unsigned int depth_type;
 
 depth_type MAX_DIST = std::numeric_limits<depth_type>::max();
 
+float gComputeTime;
+
+inline void startComputeTime(struct timeval* start) {
+  gettimeofday(start, 0);
+}
+
+inline void endComputeTime(struct timeval* start, struct timeval* end) {
+  gettimeofday(end, 0);
+  float time;
+  time = (end->tv_sec-start->tv_sec)*1e3+(end->tv_usec-start->tv_usec)*1e-3;
+  gComputeTime += time;
+}
+
 class BFSD2 {
   public: 
     depth_type depth;
@@ -70,26 +83,40 @@ class BFS2 : public GraphMat::GraphProgram<unsigned long long int, unsigned long
     current_depth = 1;
     this->order = GraphMat::OUT_EDGES;
     this->process_message_requires_vertexprop = false;
+    gComputeTime = 0.0;
   }
 
   void reduce_function(unsigned long long int& a, const unsigned long long int& b) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     a=b;
+    endComputeTime(&start, &end);
   }
 
   void process_message(const unsigned long long int& message, const int edge_val, const BFSD2& vertexprop, unsigned long long int &res) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     res = message;
+    endComputeTime(&start, &end);
   }
 
   bool send_message(const BFSD2& vertexprop, unsigned long long int& message) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     message = vertexprop.id;
-    return (vertexprop.depth == current_depth-1);
+    bool ret = (vertexprop.depth == current_depth-1);
+    endComputeTime(&start, &end);
+    return ret;
   }
 
   void apply(const unsigned long long int& message_out, BFSD2& vertexprop)  {
+    struct timeval start, end;
+    startComputeTime(&start);
     if (vertexprop.depth == MAX_DIST) {
       vertexprop.depth = current_depth;
       vertexprop.parent = message_out;
     }
+    endComputeTime(&start, &end);
   }
 
   void do_every_iteration(int iteration_number) {
@@ -109,7 +136,14 @@ void reachable_or_not(BFSD2* v, int *result, void* params=nullptr) {
 
 void run_bfs(char* filename, int v) {
   GraphMat::Graph<BFSD2> G;
-  G.ReadMTX(filename); 
+  G.ReadMTX(filename);
+  //GraphMat::edgelist_t<int> E;
+  //GraphMat::load_edgelist<int>(filename, &E, false, false, true);
+  //E.m = std::max(E.m, E.n); //possible that without headers, the edgelist is interpreted as a "rectangular" matrix.
+  //E.n = E.m; //Fix by setting E to be a "square" matrix by setting both dimensions to be the max of the two.
+  //GraphMat::Graph<BFSD2> G;
+  //G.ReadEdgelist(E);
+  //E.clear();
   
   for(int i = 0 ; i < G.getNumberOfVertices() ; i++)
   {
@@ -130,12 +164,18 @@ void run_bfs(char* filename, int v) {
   G.setActive(v);
 
   struct timeval start, end;
+  float total_time, graph_time, compute_time;
   gettimeofday(&start, 0);
 
   GraphMat::run_graph_program(&b, G, GraphMat::UNTIL_CONVERGENCE, &b_tmp);
 
   gettimeofday(&end, 0);
-  printf("Time = %.3f ms \n", (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3);
+  total_time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
+  compute_time = gComputeTime;
+  graph_time = total_time - compute_time;
+  printf("compute Time = %.3f ms (%.3f percent)\n", compute_time, compute_time/total_time);
+  printf("graph Time = %.3f ms (%.3f percent)\n", graph_time, graph_time/total_time);
+  printf("Total Time = %.3f ms \n", total_time);
  
   GraphMat::graph_program_clear(b_tmp);
 

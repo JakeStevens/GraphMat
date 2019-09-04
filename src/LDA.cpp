@@ -34,6 +34,19 @@
 #include <algorithm>
 #include <iomanip>
 
+double gComputeTime;
+
+inline void startComputeTime(struct timeval* start) {
+  gettimeofday(start, 0);
+}
+
+inline void endComputeTime(struct timeval* start, struct timeval* end) {
+  gettimeofday(end, 0);
+  float time;
+  time = (end->tv_sec-start->tv_sec)*1e3+(end->tv_usec-start->tv_usec)*1e-3;
+  gComputeTime += time;
+}
+
 template <unsigned int K>
 class LatentVector {
   public:
@@ -113,16 +126,22 @@ class LDAInitProgram : public GraphMat::GraphProgram<LatentVector<K>, LatentVect
 
 template<unsigned int K>
 void IfTerm(LatentVector<K>* v, LatentVector<K>* out, void* param) {
+  //struct timeval start, end;
+  //startComputeTime(&start);
   if (v->type == 'w') {
     for (int i = 0; i < K; i++) out->N[i] = v->N[i];
   } else {
     for (int i = 0; i < K; i++) out->N[i] = 0;
   }
+  //endComputeTime(&start, &end);
 }
 
 template<unsigned int K>
 void Add(const LatentVector<K>& v1, const LatentVector<K>& v2, LatentVector<K>* out, void* param) {
-    for (int i = 0; i < K; i++) out->N[i] = v1.N[i] + v2.N[i];
+  //struct timeval start, end;
+  //startComputeTime(&start);
+  for (int i = 0; i < K; i++) out->N[i] = v1.N[i] + v2.N[i];
+  //endComputeTime(&start, &end);
 }
 
 template<unsigned int K>
@@ -147,13 +166,18 @@ class LDAProgram : public GraphMat::GraphProgram<LatentVector<K>, LatentVector<K
     }
 
   void reduce_function(LatentVector<K>& v, const LatentVector<K>& w) const {
+    //struct timeval start, end;
+    //startComputeTime(&start);
     for (int i = 0; i < K; i++) v.N[i] += w.N[i];
+    //endComputeTime(&start, &end);
   }
 
   void process_message(const LatentVector<K>& message, const int edge_value, 
                         const LatentVector<K>& vertexprop, LatentVector<K>& res) const {
     double gamma_wjk[K];
     double my_offset, other_offset;
+    //struct timeval start, end;
+    //startComputeTime(&start);
 
     if (vertexprop.type == 'd') {
       my_offset = alpha; 
@@ -173,17 +197,24 @@ class LDAProgram : public GraphMat::GraphProgram<LatentVector<K>, LatentVector<K
     for (int i = 0; i < K; i++) {
       res.N[i] = gamma_wjk[i]/sum*(double)edge_value;
     }
+    //endComputeTime(&start, &end);
   }
 
   bool send_message(const LatentVector<K>& vertexprop, LatentVector<K>& message) const {
+    //struct timeval start, end;
+    //startComputeTime(&start);
     message = vertexprop;
+    //endComputeTime(&start, &end);
     return true;
   }
 
   void apply(const LatentVector<K>& message_out, LatentVector<K>& vertexprop) {
+    //struct timeval start, end;
+    //startComputeTime(&start);
     for (int i = 0; i < K; i++) {
       vertexprop.N[i] = message_out.N[i];
     }
+    //endComputeTime(&start, &end);
   }
 
 
@@ -297,17 +328,22 @@ void run_lda(char* filename, int ndoc, int nterms, int niterations=10) {
 
   printf("LDA Init over\n");
   
-  struct timeval start, end;
+  //struct timeval start, end;
 
-  gettimeofday(&start, 0);
+  //gettimeofday(&start, 0);
 
   G.setAllActive();
   GraphMat::run_graph_program(&ldap, G, niterations, &ldap_tmp);
 
-  gettimeofday(&end, 0);
+  //gettimeofday(&end, 0);
   
-  double time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
-  printf("Time = %.3f ms \n", time);
+  //double total_time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
+  //double graph_time, compute_time;
+  //compute_time = gComputeTime;
+  //graph_time = total_time - compute_time;
+  //printf("compute Time = %.3f ms (%.3f percent)\n", compute_time, compute_time/total_time);
+  //printf("graph Time = %.3f ms (%.3f percent)\n", graph_time, graph_time/total_time);
+  //printf("Total Time = %.3f ms \n", total_time);
 
   GraphMat::graph_program_clear(ldap_tmp);
 

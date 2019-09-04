@@ -33,6 +33,19 @@
 
 const int MAX_THREADS = 120;
 
+double gComputeTime;
+
+inline void startComputeTime(struct timeval* start) {
+  gettimeofday(start, 0);
+}
+
+inline void endComputeTime(struct timeval* start, struct timeval* end) {
+  gettimeofday(end, 0);
+  float time;
+  time = (end->tv_sec-start->tv_sec)*1e3+(end->tv_usec-start->tv_usec)*1e-3;
+  gComputeTime += time;
+}
+
 template <unsigned int K>
 class LatentVector {
   public:
@@ -89,11 +102,16 @@ class SGDProgram : public GraphMat::GraphProgram<LatentVector<K>, LatentVector<K
     }
 
   void reduce_function(LatentVector<K>& v, const LatentVector<K>& w) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     for (int i = 0; i < K; i++) v.lv[i] += w.lv[i];
+    endComputeTime(&start, &end);
   }
 
   void process_message(const LatentVector<K>& message, const int edge_val, 
                         const LatentVector<K>& vertexprop, LatentVector<K>& res) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     double estimate = 0;
     for (int i = 0; i < K; i++) {
       estimate += message.lv[i]*vertexprop.lv[i];
@@ -103,17 +121,23 @@ class SGDProgram : public GraphMat::GraphProgram<LatentVector<K>, LatentVector<K
     for (int i =0; i < K; i++) {
       res.lv[i] =  message.lv[i]*error;
     }
+    endComputeTime(&start, &end);
   }
 
   bool send_message(const LatentVector<K>& vertexprop, LatentVector<K>& message) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     message = vertexprop;
     return true;
   }
 
   void apply(const LatentVector<K>& message_out, LatentVector<K>& vertexprop) {
+    struct timeval start, end;
+    startComputeTime(&start);
     for (int i =0; i < K; i++) {
       vertexprop.lv[i] += step*(-lambda*vertexprop.lv[i] +message_out.lv[i]);
     }
+    endComputeTime(&start, &end);
   }
 
 
@@ -201,8 +225,13 @@ void run_sgd(char* filename) {
 
   gettimeofday(&end, 0);
   
-  double time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
-  printf("Time = %.3f ms \n", time);
+  double total_time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
+  double graph_time, compute_time;
+  compute_time = gComputeTime;
+  graph_time = total_time - compute_time;
+  printf("compute Time = %.3f ms (%.3f percent)\n", compute_time, compute_time/total_time);
+  printf("graph Time = %.3f ms (%.3f percent)\n", graph_time, graph_time/total_time);
+  printf("Total Time = %.3f ms \n", total_time);
 
   G.setAllActive();
   GraphMat::run_graph_program(&rmsep, G, 1, &rmsep_tmp);

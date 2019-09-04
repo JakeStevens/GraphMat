@@ -36,6 +36,19 @@
 typedef unsigned int depth_type;
 depth_type MAX_DIST = std::numeric_limits<depth_type>::max();
 
+double gComputeTime;
+
+inline void startComputeTime(struct timeval* start) {
+  gettimeofday(start, 0);
+}
+
+inline void endComputeTime(struct timeval* start, struct timeval* end) {
+  gettimeofday(end, 0);
+  float time;
+  time = (end->tv_sec-start->tv_sec)*1e3+(end->tv_usec-start->tv_usec)*1e-3;
+  gComputeTime += time;
+}
+
 class Vertex_type {
   public: 
     depth_type topsort_order;
@@ -67,20 +80,32 @@ class InDegree : public GraphMat::GraphProgram<int, int, V, E> {
   }
 
   bool send_message(const V& vertex, int& message) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     message = 1;
+    endComputeTime(&start, &end);
     return true;
   }
 
   void process_message(const int& message, const E edge_value, const V& vertex, int& result) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     result = message;
+    endComputeTime(&start, &end);
   }
 
   void reduce_function(int& a, const int& b) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     a += b;
+    endComputeTime(&start, &end);
   }
 
   void apply(const int& message_out, V& vertex) {
+    struct timeval start, end;
+    startComputeTime(&start);
     vertex.in_degree = message_out; 
+    endComputeTime(&start, &end);
   }
 
 };
@@ -100,20 +125,31 @@ class TopSort : public GraphMat::GraphProgram<bool, int, Vertex_type> {
   }
 
   void reduce_function(int& a, const int& b) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     a += b;
+    endComputeTime(&start, &end);
   }
 
   void process_message(const bool& message, const int edge_val, const Vertex_type& vertex, int &res) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     res = (message == true)?(1):(0); 
     //assert(message == true);
+    endComputeTime(&start, &end);
   }
 
   bool send_message(const Vertex_type& vertex, bool& message) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     message = (vertex.in_degree == 0)?true:false;
+    endComputeTime(&start, &end);
     return true; //(vertex.in_degree == 0);
   }
 
   void apply(const int& message_out, Vertex_type& vertex)  {
+    struct timeval start, end;
+    startComputeTime(&start);
     assert(message_out > 0);
     assert(vertex.in_degree > 0);
     vertex.in_degree -= message_out;
@@ -121,6 +157,7 @@ class TopSort : public GraphMat::GraphProgram<bool, int, Vertex_type> {
       vertex.topsort_order= current_topsort_order;
     }
     assert(vertex.in_degree >= 0);
+    endComputeTime(&start, &end);
   }
 
   void do_every_iteration(int iteration_number) {
@@ -169,7 +206,13 @@ void run_topsort(char* filename) {
   GraphMat::run_graph_program(&topsort, G, GraphMat::UNTIL_CONVERGENCE, &b_tmp);
 
   gettimeofday(&end, 0);
-  printf("Time = %.3f ms \n", (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3);
+  double total_time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
+  double graph_time, compute_time;
+  compute_time = gComputeTime;
+  graph_time = total_time - compute_time;
+  printf("compute Time = %.3f ms (%.3f percent)\n", compute_time, compute_time/total_time);
+  printf("graph Time = %.3f ms (%.3f percent)\n", graph_time, graph_time/total_time);
+  printf("Total Time = %.3f ms \n", total_time);
  
   GraphMat::graph_program_clear(d_tmp);
   GraphMat::graph_program_clear(b_tmp);

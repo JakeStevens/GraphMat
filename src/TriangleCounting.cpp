@@ -35,7 +35,44 @@
 #include <assert.h>
 #include <boost/serialization/vector.hpp>
 
+#include <chrono>
 
+using namespace std::chrono;
+double gComputeTime;
+double gTotalTime;
+
+inline void startComputeTime(time_point<high_resolution_clock>* start) {
+  *start = high_resolution_clock::now();
+}
+
+inline void endComputeTime(time_point<high_resolution_clock>* start, time_point<high_resolution_clock>* end) {
+  *end = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(*end-*start);
+  gComputeTime += duration.count();
+}
+
+inline void startTotalTime(time_point<high_resolution_clock>* start) {
+  *start = high_resolution_clock::now();
+}
+
+inline void endTotalTime(time_point<high_resolution_clock>* start, time_point<high_resolution_clock>* end) {
+  *end = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(*end-*start);
+  gTotalTime += duration.count();
+}
+
+/*
+inline void startComputeTime(struct timeval* start) {
+  gettimeofday(start, 0);
+}
+
+inline void endComputeTime(struct timeval* start, struct timeval* end) {
+  gettimeofday(end, 0);
+  float time;
+  time = (end->tv_sec-start->tv_sec)*1e3+(end->tv_usec-start->tv_usec)*1e-3;
+  gComputeTime += time;
+}
+*/
 class TC : public GraphMat::Serializable {
   public:
     int id;
@@ -90,22 +127,38 @@ class GetNeighbors : public GraphMat::GraphProgram<int, serializable_vector<int>
   }
 
   void reduce_function(serializable_vector<int>& a, const serializable_vector<int>& b) const {
+    //struct timeval start, end;
+    //time_point<high_resolution_clock> start, end;
+    //startComputeTime(&start);
     a.v.insert(a.v.end(), b.v.begin(), b.v.end()); 
+    //endComputeTime(&start, &end);
   }
 
   void process_message(const int& message, const int edge_val, const TC& vertexprop, serializable_vector<int>& res) const {
+    //struct timeval start, end;
+    //time_point<high_resolution_clock> start, end;
+    //startComputeTime(&start);
     res.v.clear(); 
     res.v.push_back(message);
+    //endComputeTime(&start, &end);
   }
 
   bool send_message(const TC& vertexprop, int& message) const {
+    //struct timeval start, end;
+    //time_point<high_resolution_clock> start, end;
+    //startComputeTime(&start);
     message = vertexprop.id;
+    //endComputeTime(&start, &end);
     return true;
   }
 
   void apply(const serializable_vector<int>& message_out, TC& vertexprop) {
+    //struct timeval start, end;
     vertexprop.neighbors = message_out.v;
+    //time_point<high_resolution_clock> start, end;
+    //startComputeTime(&start);
     std::sort(vertexprop.neighbors.begin(), vertexprop.neighbors.end());
+    //endComputeTime(&start, &end);
   }
 
 };
@@ -121,10 +174,16 @@ class CountTriangles: public GraphMat::GraphProgram<TC, int, TC> {
   }
 
   void reduce_function(int& v, const int& w) const {
+    //struct timeval start, end;
+    //time_point<high_resolution_clock> start, end;
+    //startComputeTime(&start);
     v += w;
+    //endComputeTime(&start, &end);
   }
 
   void process_message(const TC& message, const int edge_val, const TC& vertexprop, int& res) const {
+    //struct timeval start, end;
+    //time_point<high_resolution_clock> start, end;
     res = 0;
     int it1 = 0, it2 = 0;
     int it1_end = message.neighbors.size();
@@ -132,24 +191,38 @@ class CountTriangles: public GraphMat::GraphProgram<TC, int, TC> {
 
     while (it1 != it1_end && it2 != it2_end){
       if (message.neighbors[it1] == vertexprop.neighbors[it2]) {
+        //startComputeTime(&start);
         res++;
         ++it1; ++it2;
+        //endComputeTime(&start, &end);
       } else if (message.neighbors[it1] < vertexprop.neighbors[it2]) {
+        //startComputeTime(&start);
         ++it1;
+        //endComputeTime(&start, &end);
       } else {
+        //startComputeTime(&start);
         ++it2;
+        //endComputeTime(&start, &end);
       }
     } 
     return;
   }
 
   bool send_message(const TC& vertexprop, TC& message) const {
+    //struct timeval start, end;
+    //time_point<high_resolution_clock> start, end;
+    //startComputeTime(&start);
     message = vertexprop;
+    //endComputeTime(&start, &end);
     return true;
   }
 
   void apply(const int& message_out, TC& vertexprop) {
+    //struct timeval start, end;
+    //time_point<high_resolution_clock> start, end;
+    //startComputeTime(&start);
     vertexprop.triangles += message_out;
+    //endComputeTime(&start, &end);
   }
 
 
@@ -170,7 +243,9 @@ void run_triangle_counting(char* filename) {
   auto gn_tmp = GraphMat::graph_program_init(gn, G);
   auto ct_tmp = GraphMat::graph_program_init(ct, G);
   
-  struct timeval start, end;
+  //struct timeval start, end;
+  //time_point<high_resolution_clock> start, end;
+  //startTotalTime(&start);
 
   for (int i = 1; i <= numberOfVertices; i++) {
     if (G.vertexNodeOwner(i)) {
@@ -179,14 +254,18 @@ void run_triangle_counting(char* filename) {
       G.setVertexproperty(i, vp);
     }
   }
-  gettimeofday(&start, 0);
 
   GraphMat::run_graph_program(&gn, G, 1, &gn_tmp);
 
   GraphMat::run_graph_program(&ct, G, 1, &ct_tmp);
   
-  gettimeofday(&end, 0);
-  printf("Time = %.3f ms \n", (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3);
+  //endTotalTime(&start, &end);
+  double graph_time, compute_time;
+  compute_time = gComputeTime;
+  graph_time = gTotalTime - compute_time;
+  printf("compute Time = %.3f ms (%.3f percent)\n", compute_time, compute_time/gTotalTime);
+  printf("graph Time = %.3f ms (%.3f percent)\n", graph_time, graph_time/gTotalTime);
+  printf("Total Time = %.3f ms \n", gTotalTime);
 
   GraphMat::graph_program_clear(gn_tmp);
   GraphMat::graph_program_clear(ct_tmp);  

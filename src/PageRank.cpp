@@ -50,6 +50,19 @@ class PR {
     }
 };
 
+double gComputeTime;
+
+inline void startComputeTime(struct timeval* start) {
+  gettimeofday(start, 0);
+}
+
+inline void endComputeTime(struct timeval* start, struct timeval* end) {
+  gettimeofday(end, 0);
+  float time;
+  time = (end->tv_sec-start->tv_sec)*1e3+(end->tv_usec-start->tv_usec)*1e-3;
+  gComputeTime += time;
+}
+
 template<class V, class E=int>
 class Degree : public GraphMat::GraphProgram<int, int, V, E> {
   public:
@@ -92,21 +105,33 @@ class PageRank : public GraphMat::GraphProgram<float, float, PR, E> {
   }
 
   void reduce_function(float& a, const float& b) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     a += b;
+    endComputeTime(&start, &end);
   }
   void process_message(const float& message, const E edge_val, const PR& vertexprop, float& res) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     res = message;
+    endComputeTime(&start, &end);
   }
   bool send_message(const PR& vertexprop, float& message) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     if (vertexprop.degree == 0) {
       message = 0.0;
     } else {
       message = vertexprop.pagerank/(float)vertexprop.degree;
     }
+    endComputeTime(&start, &end);
     return true;
   }
   void apply(const float& message_out, PR& vertexprop) {
+    struct timeval start, end;
+    startComputeTime(&start);
     vertexprop.pagerank = alpha + (1.0-alpha)*message_out; //non-delta update
+    endComputeTime(&start, &end);
   }
 
 };
@@ -131,21 +156,27 @@ void run_pagerank(const char* filename) {
   GraphMat::run_graph_program(&dg, G, 1, &dg_tmp);
 
   gettimeofday(&end, 0);
-  double time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
-  printf("Degree Time = %.3f ms \n", time);
+  double total_time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
+  printf("Degree Time = %.3f ms \n", total_time);
 
   GraphMat::graph_program_clear(dg_tmp);
   
   auto pr_tmp = GraphMat::graph_program_init(pr, G);
 
+  double graph_time, compute_time;
   gettimeofday(&start, 0);
 
   G.setAllActive();
   GraphMat::run_graph_program(&pr, G, GraphMat::UNTIL_CONVERGENCE, &pr_tmp);
   
   gettimeofday(&end, 0);
-  time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
-  printf("PR Time = %.3f ms \n", time);
+  total_time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
+  compute_time = gComputeTime;
+  graph_time = total_time - compute_time;
+  printf("compute Time = %.3f ms (%.3f percent)\n", compute_time, compute_time/total_time);
+  printf("graph Time = %.3f ms (%.3f percent)\n", graph_time, graph_time/total_time);
+  printf("Total Time = %.3f ms \n", total_time);
+  printf("PR Time = %.3f ms \n", total_time);
 
   GraphMat::graph_program_clear(pr_tmp);
 

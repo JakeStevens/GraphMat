@@ -39,6 +39,19 @@ typedef unsigned int distance_type;
 
 distance_type MAX_DIST = std::numeric_limits<distance_type>::max();
 
+double gComputeTime;
+
+inline void startComputeTime(struct timeval* start) {
+  gettimeofday(start, 0);
+}
+
+inline void endComputeTime(struct timeval* start, struct timeval* end) {
+  gettimeofday(end, 0);
+  float time;
+  time = (end->tv_sec-start->tv_sec)*1e3+(end->tv_usec-start->tv_usec)*1e-3;
+  gComputeTime += time;
+}
+
 class DeltaSteppingDS {
   public: 
     distance_type distance;
@@ -76,23 +89,35 @@ class DeltaStepping : public GraphMat::GraphProgram<distance_type, distance_type
   }
 
   void reduce_function(distance_type& a, const distance_type& b) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     a = (a <= b)?(a):(b);
+    endComputeTime(&start, &end);
   }
 
   void process_message(const distance_type& message, const int edge_val, const DeltaSteppingDS& vertex, distance_type& res) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     res = (message < MAX_DIST) ? (message + edge_val) : (MAX_DIST); //always <= delta
+    endComputeTime(&start, &end);
   }
 
   bool send_message(const DeltaSteppingDS& vertex, distance_type& message) const {
+    struct timeval start, end;
+    startComputeTime(&start);
     message = (vertex.bucket == bid)?(vertex.distance):(MAX_DIST);
     return true;//(vertex.bucket == bid);
+    endComputeTime(&start, &end);
   }
 
   void apply(const distance_type& message_out, DeltaSteppingDS& vertex)  {
+    struct timeval start, end;
+    startComputeTime(&start);
     if (vertex.distance > message_out) {
       vertex.distance = message_out;
       vertex.bucket = (int)(message_out/delta);
     }
+    endComputeTime(&start, &end);
   }
 
 };
@@ -106,12 +131,18 @@ void reachable_or_not(DeltaSteppingDS* v, int *result, void* params=nullptr) {
 }
 
 void CheckBucketNotEmpty(DeltaSteppingDS* v, int* result, void* param) { 
+  struct timeval start, end;
+  startComputeTime(&start);
   *result = (v->bucket >= *(int*)param && v->bucket < std::numeric_limits<int>::max())? (1) : (0); 
+  endComputeTime(&start, &end);
 }
 
 template<typename T>
 void Add(const T& a, const T& b, T *c, void *param) {
+  struct timeval start, end;
+  startComputeTime(&start);
   *c = a + b;
+  endComputeTime(&start, &end);
 }
 
 bool less_than_delta(GraphMat::edge_t<int> e, void* param) {
@@ -178,7 +209,13 @@ void run_deltastepping(char* filename, int delta, int source) {
   } while(bucket_not_empty != 0);
 
   gettimeofday(&end, 0);
-  printf("Time = %.3f ms \n", (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3);
+  double total_time = (end.tv_sec-start.tv_sec)*1e3+(end.tv_usec-start.tv_usec)*1e-3;
+  double graph_time, compute_time;
+  compute_time = gComputeTime;
+  graph_time = total_time - compute_time;
+  printf("compute Time = %.3f ms (%.3f percent)\n", compute_time, compute_time/total_time);
+  printf("graph Time = %.3f ms (%.3f percent)\n", graph_time, graph_time/total_time);
+  printf("Total Time = %.3f ms \n", total_time);
 
   if (GraphMat::get_global_myrank() == 0) printf("Number of buckets processed = %d \n", deltastep.bid);
   GraphMat::graph_program_clear(ds_ts);
